@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  Select text anywhere&nbsp;&nbsp;→&nbsp;&nbsp;press <kbd>⇧ Shift</kbd> <kbd>⇧ Shift</kbd>&nbsp;&nbsp;→&nbsp;&nbsp;it's saved.
+</p>
+
+<p align="center">
   <img src="docs/screenshot.png" width="860" alt="Stash in light and dark mode">
 </p>
 
@@ -17,16 +21,30 @@ You're deep in a conversation with Claude or ChatGPT and think *"I'll need this 
 
 Stash is a personal re-creation of [Copper](https://shadcn.com/copper) by [shadcn](https://x.com/shadcn), built from its public demos. It isn't affiliated with Copper. If you like the idea, go buy the real thing.
 
+## How it works
+
+1. **Select text in any app**: an answer in Claude, a link in Chrome, a line of code in your editor.
+2. **Press <kbd>⇧ Shift</kbd> twice.** Stash saves the selection to your active section and shows a small "Saved" notice, without taking you out of what you're doing.
+3. **Click the S in your menu bar** to open Stash, or press <kbd>⇧ Shift</kbd> twice with nothing selected. Copy a note back into your next prompt, then tick it off.
+
 ## Features
 
-- **Capture from anywhere.** Select text in any app and double-tap Shift. Formatting copied from Claude, ChatGPT or Chrome (bold, italics, code and links) comes along as Markdown.
-- **Sections.** Type `# Name` in the composer to start a section, or `## Name` for a subsection. New notes and captures go to the active section. Press ⌘K to switch, or choose "All Sections".
-- **Prompt queue.** Type the prompts you want to try next, copy one with ⌘C, and tick it off. Copy several as a numbered list with ⇧⌘C.
-- **Attachments.** Paste or drop files and images, or use ⊕ to attach files or capture a screenshot. Copying a note copies its files too, so screenshots paste straight into your next prompt.
-- **Drawing editor.** Press ⌘ + Shift + Shift from any app to sketch with a pen, shapes, arrows and text. Save the drawing to Stash, or copy it into a prompt.
-- **Color tags, inline editing, merge, drag to reorder, search and undo.**
-- **Menu bar app.** No Dock icon unless you want one, optional launch at login, and a "Saved to …" notice so a capture never happens silently.
-- **Local and private.** No account, no sync, no analytics, no network access. Your notes are a plain Markdown file you can open in any editor.
+- **Capture from anywhere**\
+  Select text in any app and double-tap Shift. Formatting copied from Claude, ChatGPT or Chrome (bold, italics, code and links) comes along as Markdown.
+- **Lives in the menu bar**\
+  No Dock icon unless you want one, optional launch at login, and a "Saved to …" notice so a capture never happens silently.
+- **Sections**\
+  Type `# Name` in the composer to start a section, or `## Name` for a subsection. New notes and captures go to the active section. Press ⌘K to switch, or choose "All Sections".
+- **Prompt queue**\
+  Type the prompts you want to try next, copy one with ⌘C, and tick it off. Copy several as a numbered list with ⇧⌘C.
+- **Attachments**\
+  Paste or drop files and images, or use ⊕ to attach files or capture a screenshot. Copying a note copies its files too, so screenshots paste straight into your next prompt.
+- **Drawing editor**\
+  Press ⌘ + Shift + Shift from any app to sketch with a pen, shapes, arrows and text. Save the drawing to Stash, or copy it into a prompt.
+- **Everyday editing**\
+  Color tags, inline editing, merge, drag to reorder, search and undo.
+- **Local and private**\
+  No account, no sync, no analytics, no network access. Your notes are a plain Markdown file you can open in any editor.
 
 <p align="center">
   <img src="docs/menus.png" width="860" alt="The note menu with copy, edit, move and color tags, and the ••• menu with sections and options">
