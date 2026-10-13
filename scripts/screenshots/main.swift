@@ -1,4 +1,5 @@
-// Renders docs/screenshot.png: the real Stash window, drawn offscreen from sample notes.
+// Renders docs/screenshot.png (the real Stash window, drawn offscreen from sample notes)
+// and docs/menus.png (its menus, which briefly appear on screen to be captured).
 // Run through scripts/make-screenshots.sh, which points STASH_DATA_DIR at a temporary folder.
 import AppKit
 
@@ -141,4 +142,12 @@ MainActor.assumeIsolated {
     try! FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
     try! compose(light: light, dark: dark).write(to: docs.appendingPathComponent("screenshot.png"))
     print("Wrote \(docs.lastPathComponent)/screenshot.png")
+
+    let menus = MenuShots.capture(notes: lightNotes, active: "Landing page")
+    if menus.count == 2 {
+        try! MenuShots.compose(menus).write(to: docs.appendingPathComponent("menus.png"))
+        print("Wrote \(docs.lastPathComponent)/menus.png")
+    } else {
+        print("Could not capture the menus; docs/menus.png was left unchanged")
+    }
 }

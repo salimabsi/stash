@@ -28,6 +28,12 @@ Stash is a personal re-creation of [Copper](https://shadcn.com/copper) by [shadc
 - **Menu bar app.** No Dock icon unless you want one, optional launch at login, and a "Saved to …" notice so a capture never happens silently.
 - **Local and private.** No account, no sync, no analytics, no network access. Your notes are a plain Markdown file you can open in any editor.
 
+<p align="center">
+  <img src="docs/menus.png" width="860" alt="The note menu with copy, edit, move and color tags, and the ••• menu with sections and options">
+</p>
+
+Right-click a note to copy it, edit it, move it to another section or give it a color tag. The ••• menu holds your sections, the drawing editor, screenshot capture and settings.
+
 ## Install
 
 Stash is built from source. You need macOS 14 or later and the Xcode Command Line Tools (`xcode-select --install`); full Xcode isn't required.
