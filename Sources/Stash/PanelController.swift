@@ -22,13 +22,36 @@ private final class StashWindow: NSWindow {
     }
 }
 
-/// The composer's field editor: pasting files or an image attaches them instead of
-/// inserting their names as text.
+/// The composer's field editor: pasting or dropping files or an image attaches them
+/// instead of inserting their names as text.
 private final class ComposerEditor: NSTextView {
     var onPasteAttachments: (NSPasteboard) -> Bool = { _ in false }
+    var onDropAttachments: (NSPasteboard) -> Bool = { _ in false }
+    var onDropTargeted: (Bool) -> Void = { _ in }
 
     override func paste(_ sender: Any?) {
         if !onPasteAttachments(.general) { super.paste(sender) }
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard Attachments.pasteboardHasAttachments(sender.draggingPasteboard) else { return super.draggingEntered(sender) }
+        onDropTargeted(true)
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        Attachments.pasteboardHasAttachments(sender.draggingPasteboard) ? .copy : super.draggingUpdated(sender)
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        onDropTargeted(false)
+        super.draggingExited(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        onDropTargeted(false)
+        guard Attachments.pasteboardHasAttachments(sender.draggingPasteboard) else { return super.performDragOperation(sender) }
+        return onDropAttachments(sender.draggingPasteboard)
     }
 }
 
@@ -314,16 +337,16 @@ final class PanelController: NSObject {
                     self.table.noteHeightOfRows(withIndexesChanged: [row])
                 }
             },
-            onFinish: { [weak self] text, removed in self?.finishEditing(id, text: text, removing: removed) }
+            onFinish: { [weak self] edit in self?.finishEditing(id, edit) }
         )
         window.makeFirstResponder(editor)
         table.noteHeightOfRows(withIndexesChanged: [row])
     }
 
-    private func finishEditing(_ id: Item.ID, text: String?, removing removed: Set<String>) {
+    private func finishEditing(_ id: Item.ID, _ edit: InlineEdit?) {
         guard editing == id else { return }
         editing = nil
-        if let text { store.edit(id, text: text, removing: removed) }
+        if let edit { store.edit(id, text: edit.text, removing: edit.removed, adding: edit.added) }
         reload()
         if let row = rowIndex(of: id) { table.selectRowIndexes([row], byExtendingSelection: false) }
         // When editing ended because the user clicked into another field, leave focus there.
@@ -412,10 +435,14 @@ final class PanelController: NSObject {
         return true
     }
 
+    private func attachDropped(_ pasteboard: NSPasteboard) -> Bool {
+        let paths = Attachments.importFromPasteboard(pasteboard)
+        composer.pending += paths
+        return !paths.isEmpty
+    }
+
     private func pasteAttachments(_ pasteboard: NSPasteboard) -> Bool {
-        let hasFiles = pasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
-        let imageOnly = pasteboard.availableType(from: [.png, .tiff]) != nil && pasteboard.string(forType: .string) == nil
-        guard hasFiles || imageOnly else { return false }
+        guard Attachments.isAttachmentPaste(pasteboard) else { return false }
         composer.pending += Attachments.importFromPasteboard(pasteboard)
         return true
     }
@@ -475,12 +502,7 @@ final class PanelController: NSObject {
     private func makeContent() -> NSView {
         let root = BackgroundView()
         root.registerForDraggedTypes([.fileURL, .png, .tiff])
-        root.onDrop = { [weak self] pasteboard in
-            guard let self else { return false }
-            let paths = Attachments.importFromPasteboard(pasteboard)
-            self.composer.pending += paths
-            return !paths.isEmpty
-        }
+        root.onDrop = { [weak self] in self?.attachDropped($0) ?? false }
 
         search.field.delegate = self
         moreButton.image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "More")?
@@ -527,6 +549,9 @@ final class PanelController: NSObject {
         }
         composerEditor.isFieldEditor = true
         composerEditor.onPasteAttachments = { [weak self] in self?.pasteAttachments($0) ?? false }
+        composerEditor.onDropAttachments = { [weak self] in self?.attachDropped($0) ?? false }
+        composerEditor.onDropTargeted = { [weak self] in self?.composer.dropTargeted = $0 }
+        composer.onDropAttachments = { [weak self] in self?.attachDropped($0) ?? false }
 
         emptyLabel.alignment = .center
         emptyLabel.font = .systemFont(ofSize: 12)

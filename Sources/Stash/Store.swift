@@ -156,19 +156,22 @@ final class Store {
     }
 
     func update(_ id: Item.ID, text: String) {
-        edit(id, text: text, removing: [])
+        edit(id, text: text)
     }
 
     /// Applies an inline edit as one undoable change: the new text plus any attachments
-    /// removed while editing. A note left with neither text nor attachments is deleted.
-    func edit(_ id: Item.ID, text: String, removing removed: Set<String>) {
+    /// removed or added while editing. A note left with neither text nor attachments is deleted.
+    func edit(_ id: Item.ID, text: String, removing removed: Set<String> = [], adding added: [String] = []) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let current = item(id), current.text != trimmed || !removed.isDisjoint(with: current.attachments) else { return }
+        guard let current = item(id),
+              current.text != trimmed || !removed.isDisjoint(with: current.attachments) || !added.isEmpty
+        else { return }
         mutate { sections in
             for s in sections.indices {
                 guard let i = sections[s].items.firstIndex(where: { $0.id == id }) else { continue }
                 sections[s].items[i].text = trimmed
                 sections[s].items[i].attachments.removeAll { removed.contains($0) }
+                sections[s].items[i].attachments += added
                 if sections[s].items[i].isEmpty { sections[s].items.remove(at: i) }
             }
         }

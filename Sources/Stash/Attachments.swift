@@ -58,6 +58,13 @@ enum Attachments {
         return []
     }
 
+    /// A paste counts as attachments when it carries files, or an image with no text
+    /// alongside it; copied rich text often includes an image rendition that isn't meant.
+    static func isAttachmentPaste(_ pasteboard: NSPasteboard) -> Bool {
+        pasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+            || (pasteboard.availableType(from: [.png, .tiff]) != nil && pasteboard.string(forType: .string) == nil)
+    }
+
     static func pasteboardHasAttachments(_ pasteboard: NSPasteboard) -> Bool {
         pasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
             || pasteboard.availableType(from: [.png, .tiff]) != nil

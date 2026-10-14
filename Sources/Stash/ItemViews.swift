@@ -243,19 +243,34 @@ final class ItemCell: NSTableCellView {
     private(set) var editor: InlineEditor?
 
     /// `onFinish` gets nil text on cancel, along with the attachments removed while editing.
-    func beginEditing(text: String, onHeightChange: @escaping () -> Void, onFinish: @escaping (String?, Set<String>) -> Void) -> InlineEditor {
+    func beginEditing(text: String, onHeightChange: @escaping () -> Void, onFinish: @escaping (InlineEdit?) -> Void) -> InlineEditor {
         endEditing()
         let editor = InlineEditor(text: text)
         var removed = Set<String>()
+        var added: [String] = []
         editor.onHeightChange = onHeightChange
         editor.onFinish = { [weak self] text in
             self?.endEditing()
-            onFinish(text, removed)
+            onFinish(text.map { InlineEdit(text: $0, removed: removed, added: added) })
+        }
+        editor.onAttach = { [weak self] pasteboard in
+            guard let self else { return false }
+            let paths = Attachments.importFromPasteboard(pasteboard)
+            guard !paths.isEmpty else { return false }
+            added += paths
+            self.strip.paths += paths
+            self.strip.isHidden = false
+            onHeightChange()
+            return true
         }
         strip.removable = true
         strip.onRemove = { [weak self] path in
             guard let self else { return }
-            removed.insert(path)
+            if added.contains(path) {
+                added.removeAll { $0 == path }
+            } else {
+                removed.insert(path)
+            }
             self.strip.paths.removeAll { $0 == path }
             self.strip.isHidden = self.strip.paths.isEmpty
             onHeightChange()
@@ -329,9 +344,17 @@ final class ItemCell: NSTableCellView {
 
 /// Multi-line, in-place editing for a note. Return saves, Shift- or Option-Return adds a
 /// line, Esc cancels, and moving focus elsewhere saves. `onFinish` gets nil on cancel.
+/// Pasted or dropped files and images go to `onAttach` instead of becoming text.
+struct InlineEdit {
+    var text: String
+    var removed: Set<String>
+    var added: [String]
+}
+
 final class InlineEditor: NSTextView, NSTextViewDelegate {
     var onHeightChange: () -> Void = {}
     var onFinish: (String?) -> Void = { _ in }
+    var onAttach: (NSPasteboard) -> Bool = { _ in false }
     private var heightConstraint: NSLayoutConstraint!
     private var finished = false
 
@@ -420,6 +443,24 @@ final class InlineEditor: NSTextView, NSTextViewDelegate {
         return resigned
     }
 
+    override func paste(_ sender: Any?) {
+        let pasteboard = NSPasteboard.general
+        if !(Attachments.isAttachmentPaste(pasteboard) && onAttach(pasteboard)) { super.paste(sender) }
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        Attachments.pasteboardHasAttachments(sender.draggingPasteboard) ? .copy : super.draggingEntered(sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        Attachments.pasteboardHasAttachments(sender.draggingPasteboard) ? .copy : super.draggingUpdated(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard Attachments.pasteboardHasAttachments(sender.draggingPasteboard) else { return super.performDragOperation(sender) }
+        return onAttach(sender.draggingPasteboard)
+    }
+
     private func finish(_ text: String?) {
         guard !finished else { return }
         finished = true
@@ -428,6 +469,8 @@ final class InlineEditor: NSTextView, NSTextViewDelegate {
 }
 
 final class AttachmentStrip: NSStackView {
+    static var badgeRoom: CGFloat { AttachmentTile.badgeRoom }
+
     var paths: [String] = [] { didSet { rebuild() } }
     var onRemove: (String) -> Void = { _ in }
     var onOpen: (String, NSView) -> Void = { path, _ in NSWorkspace.shared.open(Attachments.url(for: path)) }
@@ -445,6 +488,7 @@ final class AttachmentStrip: NSStackView {
 
     private func rebuild() {
         arrangedSubviews.forEach { $0.removeFromSuperview() }
+        spacing = removable ? 4 : 8
         let shown = paths.prefix(4)
         for path in shown {
             let tile = AttachmentTile(path: path, removable: removable)
@@ -464,7 +508,13 @@ final class AttachmentStrip: NSStackView {
     }
 }
 
+/// A square thumbnail. When removable, the remove badge sits on its top-right corner,
+/// half outside the image, so it never covers the content; the tile grows by `badgeRoom`
+/// on those sides so the whole badge stays clickable.
 private final class AttachmentTile: NSView {
+    static let side: CGFloat = 56
+    static let badgeRoom: CGFloat = 7
+
     var onRemove: () -> Void = {}
     var onOpen: () -> Void = {}
     let path: String
@@ -472,60 +522,92 @@ private final class AttachmentTile: NSView {
     init(path: String, removable: Bool) {
         self.path = path
         super.init(frame: .zero)
-        wantsLayer = true
-        layer?.cornerRadius = 8
-        layer?.masksToBounds = true
-        layer?.borderWidth = 0.5
-        layer?.borderColor = NSColor.separatorColor.cgColor
-        toolTip = Attachments.displayName(path) + "\nDouble-click to open"
+        toolTip = Attachments.displayName(path) + "\nDouble-click to preview"
 
+        let card = NSView()
+        card.wantsLayer = true
+        card.layer?.cornerRadius = 10
+        card.layer?.cornerCurve = .continuous
+        card.layer?.masksToBounds = true
+        card.layer?.borderWidth = 1
+        card.layer?.borderColor = NSColor.separatorColor.cgColor
+        card.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(card)
+
+        let room = removable ? Self.badgeRoom : 0
         var constraints = [
-            widthAnchor.constraint(equalToConstant: 64),
-            heightAnchor.constraint(equalToConstant: 52),
+            widthAnchor.constraint(equalToConstant: Self.side + room),
+            heightAnchor.constraint(equalToConstant: Self.side + room),
+            card.leadingAnchor.constraint(equalTo: leadingAnchor),
+            card.bottomAnchor.constraint(equalTo: bottomAnchor),
+            card.widthAnchor.constraint(equalToConstant: Self.side),
+            card.heightAnchor.constraint(equalToConstant: Self.side),
         ]
         if Attachments.isImage(path) {
-            layer?.backgroundColor = NSColor.white.cgColor
-            layer?.contents = Attachments.thumbnail(path)
-            layer?.contentsGravity = .resizeAspectFill
+            card.layer?.backgroundColor = NSColor.white.cgColor
+            card.layer?.contents = Attachments.thumbnail(path)
+            card.layer?.contentsGravity = .resizeAspectFill
         } else {
-            let image = NSImageView(image: Attachments.thumbnail(path))
-            image.imageScaling = .scaleProportionallyUpOrDown
-            image.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(image)
+            let icon = NSImageView(image: Attachments.thumbnail(path))
+            icon.imageScaling = .scaleProportionallyUpOrDown
             let name = NSTextField(labelWithString: Attachments.displayName(path))
             name.font = .systemFont(ofSize: 9)
             name.textColor = .secondaryLabelColor
             name.lineBreakMode = .byTruncatingMiddle
             name.alignment = .center
-            name.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(name)
+            for view in [icon, name] {
+                view.translatesAutoresizingMaskIntoConstraints = false
+                card.addSubview(view)
+            }
             constraints += [
-                image.centerXAnchor.constraint(equalTo: centerXAnchor),
-                image.topAnchor.constraint(equalTo: topAnchor, constant: 5),
-                image.widthAnchor.constraint(equalToConstant: 28),
-                image.heightAnchor.constraint(equalToConstant: 28),
-                name.topAnchor.constraint(equalTo: image.bottomAnchor, constant: 2),
-                name.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
-                name.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
+                icon.centerXAnchor.constraint(equalTo: card.centerXAnchor),
+                icon.topAnchor.constraint(equalTo: card.topAnchor, constant: 7),
+                icon.widthAnchor.constraint(equalToConstant: 28),
+                icon.heightAnchor.constraint(equalToConstant: 28),
+                name.topAnchor.constraint(equalTo: icon.bottomAnchor, constant: 2),
+                name.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 4),
+                name.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -4),
             ]
         }
 
         if removable {
-            let remove = NSButton(image: NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Remove")!, target: self, action: #selector(removeTapped))
+            let remove = NSButton(image: Self.removeBadge, target: self, action: #selector(removeTapped))
             remove.isBordered = false
-            remove.symbolConfiguration = NSImage.SymbolConfiguration(paletteColors: [.white, NSColor.black.withAlphaComponent(0.65)])
-                .applying(.init(pointSize: 13, weight: .regular))
+            remove.imagePosition = .imageOnly
+            remove.toolTip = "Remove"
             remove.translatesAutoresizingMaskIntoConstraints = false
             addSubview(remove)
             constraints += [
-                remove.topAnchor.constraint(equalTo: topAnchor, constant: 2),
-                remove.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+                remove.widthAnchor.constraint(equalToConstant: 20),
+                remove.heightAnchor.constraint(equalToConstant: 20),
+                remove.centerXAnchor.constraint(equalTo: card.trailingAnchor, constant: -2),
+                remove.centerYAnchor.constraint(equalTo: card.topAnchor, constant: 2),
             ]
         }
         NSLayoutConstraint.activate(constraints)
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    /// A dark disc with a white cross and a light (or, in dark mode, dark) ring, so it reads as sitting on
+    /// top of the thumbnail's corner in both light and dark mode.
+    private static let removeBadge = NSImage(size: NSSize(width: 20, height: 20), flipped: false) { rect in
+        NSColor(name: nil) { $0.isDark ? NSColor(white: 0.17, alpha: 1) : NSColor(white: 1, alpha: 1) }.setFill()
+        NSBezierPath(ovalIn: rect).fill()
+        NSColor(white: 0.12, alpha: 0.85).setFill()
+        NSBezierPath(ovalIn: rect.insetBy(dx: 2, dy: 2)).fill()
+        let cross = NSBezierPath()
+        let inset: CGFloat = 7
+        cross.move(to: NSPoint(x: rect.minX + inset, y: rect.minY + inset))
+        cross.line(to: NSPoint(x: rect.maxX - inset, y: rect.maxY - inset))
+        cross.move(to: NSPoint(x: rect.minX + inset, y: rect.maxY - inset))
+        cross.line(to: NSPoint(x: rect.maxX - inset, y: rect.minY + inset))
+        cross.lineWidth = 1.6
+        cross.lineCapStyle = .round
+        NSColor.white.setStroke()
+        cross.stroke()
+        return true
+    }
 
     override func mouseDown(with event: NSEvent) {
         if event.clickCount == 2 {
@@ -597,17 +679,26 @@ final class Composer: NSView {
     let strip = AttachmentStrip(removable: true)
     private let background = FillView()
     private var heightConstraint: NSLayoutConstraint!
+    private var fieldTop: NSLayoutConstraint!
     private let minHeight: CGFloat = 34
     private let maxHeight: CGFloat = 160
 
     var focused = false {
-        didSet { background.ring = focused ? .controlAccentColor : nil }
+        didSet { updateRing() }
     }
+
+    /// The accent ring also marks the composer as the target while files are dragged over it.
+    var dropTargeted = false {
+        didSet { updateRing() }
+    }
+
+    var onDropAttachments: (NSPasteboard) -> Bool = { _ in false }
 
     var pending: [String] = [] {
         didSet {
             strip.paths = pending
             strip.isHidden = pending.isEmpty
+            fieldTop.constant = pending.isEmpty ? 2 : 10
         }
     }
 
@@ -632,6 +723,10 @@ final class Composer: NSView {
         field.onFocus = { [weak self] in self?.focused = true }
         strip.isHidden = true
 
+        // The field would otherwise take drops itself and insert file paths as text.
+        field.unregisterDraggedTypes()
+        registerForDraggedTypes([.fileURL, .png, .tiff, .string])
+
         let stack = NSStackView(views: [strip])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -641,19 +736,20 @@ final class Composer: NSView {
             addSubview(view)
         }
         heightConstraint = field.heightAnchor.constraint(equalToConstant: minHeight)
+        fieldTop = field.topAnchor.constraint(equalTo: stack.bottomAnchor, constant: 2)
         NSLayoutConstraint.activate([
             background.topAnchor.constraint(equalTo: topAnchor),
             background.bottomAnchor.constraint(equalTo: bottomAnchor),
             background.leadingAnchor.constraint(equalTo: leadingAnchor),
             background.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 12 - AttachmentStrip.badgeRoom),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Palette.cardPadding),
             stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -Palette.cardPadding),
             plusButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Palette.cardPadding - 1),
             plusButton.centerYAnchor.constraint(equalTo: field.topAnchor, constant: 8.5),
             field.leadingAnchor.constraint(equalTo: plusButton.trailingAnchor, constant: 9),
             field.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Palette.cardPadding),
-            field.topAnchor.constraint(equalTo: stack.bottomAnchor, constant: 2),
+            fieldTop,
             field.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
             heightConstraint,
         ])
@@ -663,6 +759,36 @@ final class Composer: NSView {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(field)
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let pasteboard = sender.draggingPasteboard
+        if Attachments.pasteboardHasAttachments(pasteboard) {
+            dropTargeted = true
+            return .copy
+        }
+        return pasteboard.string(forType: .string) != nil ? .copy : []
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        dropTargeted = false
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        dropTargeted = false
+        let pasteboard = sender.draggingPasteboard
+        if Attachments.pasteboardHasAttachments(pasteboard) {
+            return onDropAttachments(pasteboard)
+        }
+        guard let text = pasteboard.string(forType: .string) else { return false }
+        window?.makeFirstResponder(field)
+        field.currentEditor()?.insertText(text)
+        fitHeight()
+        return true
+    }
+
+    private func updateRing() {
+        background.ring = focused || dropTargeted ? .controlAccentColor : nil
     }
 
     func fitHeight() {
