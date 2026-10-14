@@ -350,6 +350,36 @@ final class DrawingCanvas: NSView, NSTextFieldDelegate {
     }
 }
 
+/// The toolbar's frosted pill. Its border colour lives on the layer, and the swatch images
+/// are drawn once, so both are refreshed here when the theme changes.
+private final class ToolbarBackground: NSVisualEffectView {
+    var onAppearanceChange: () -> Void = {}
+
+    init() {
+        super.init(frame: .zero)
+        material = .popover
+        state = .active
+        wantsLayer = true
+        layer?.cornerRadius = 12
+        layer?.borderWidth = 0.5
+        updateBorder()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateBorder()
+        onAppearanceChange()
+    }
+
+    private func updateBorder() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.borderColor = NSColor.separatorColor.cgColor
+        }
+    }
+}
+
 @MainActor
 final class DrawingWindowController: NSWindowController, NSWindowDelegate {
     private static var current: DrawingWindowController?
@@ -463,13 +493,8 @@ final class DrawingWindowController: NSWindowController, NSWindowDelegate {
         let toolbar = NSStackView(views: items)
         toolbar.spacing = 4
         toolbar.edgeInsets = NSEdgeInsets(top: 6, left: 8, bottom: 6, right: 8)
-        let toolbarBackground = NSVisualEffectView()
-        toolbarBackground.material = .popover
-        toolbarBackground.state = .active
-        toolbarBackground.wantsLayer = true
-        toolbarBackground.layer?.cornerRadius = 12
-        toolbarBackground.layer?.borderWidth = 0.5
-        toolbarBackground.layer?.borderColor = NSColor.separatorColor.cgColor
+        let toolbarBackground = ToolbarBackground()
+        toolbarBackground.onAppearanceChange = { [weak self] in self?.syncToolbar() }
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         toolbarBackground.translatesAutoresizingMaskIntoConstraints = false
         toolbarBackground.addSubview(toolbar)

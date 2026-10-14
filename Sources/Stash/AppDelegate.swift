@@ -21,12 +21,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         monitor.onCapture = { [weak self] in Task { @MainActor in self?.handleCapture() } }
         monitor.onDraw = { [weak self] in Task { @MainActor in self?.panel.openDrawing() } }
         applyMonitorSettings()
+        applyTheme()
         monitor.start()
 
         NotificationCenter.default.addObserver(forName: Settings.didChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.applyActivationPolicy()
                 self?.applyMonitorSettings()
+                self?.applyTheme()
             }
         }
 
@@ -45,6 +47,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         panel.show()
         return false
+    }
+
+    private func applyTheme() {
+        NSApp.appearance = Settings.shared.theme.appearance
     }
 
     private func applyActivationPolicy() {

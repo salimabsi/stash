@@ -514,6 +514,7 @@ final class AttachmentStrip: NSStackView {
 private final class AttachmentTile: NSView {
     static let side: CGFloat = 56
     static let badgeRoom: CGFloat = 7
+    private let card = NSView()
 
     var onRemove: () -> Void = {}
     var onOpen: () -> Void = {}
@@ -524,7 +525,6 @@ private final class AttachmentTile: NSView {
         super.init(frame: .zero)
         toolTip = Attachments.displayName(path) + "\nDouble-click to preview"
 
-        let card = NSView()
         card.wantsLayer = true
         card.layer?.cornerRadius = 10
         card.layer?.cornerCurve = .continuous
@@ -607,6 +607,13 @@ private final class AttachmentTile: NSView {
         NSColor.white.setStroke()
         cross.stroke()
         return true
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            card.layer?.borderColor = NSColor.separatorColor.cgColor
+        }
     }
 
     override func mouseDown(with event: NSEvent) {

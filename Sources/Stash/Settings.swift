@@ -1,6 +1,21 @@
 import AppKit
 import ServiceManagement
 
+enum Theme: String, CaseIterable {
+    case system, light, dark
+
+    var title: String { rawValue.capitalized }
+
+    /// nil lets the app follow the system appearance, including automatic switching.
+    var appearance: NSAppearance? {
+        switch self {
+        case .system: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
 @MainActor
 final class Settings {
     static let shared = Settings()
@@ -20,6 +35,11 @@ final class Settings {
     var drawingShortcut: Bool {
         get { defaults.bool(forKey: "drawingShortcut") && triggerKey != .command }
         set { defaults.set(newValue, forKey: "drawingShortcut"); changed() }
+    }
+
+    var theme: Theme {
+        get { Theme(rawValue: defaults.string(forKey: "theme") ?? "") ?? .system }
+        set { defaults.set(newValue.rawValue, forKey: "theme"); changed() }
     }
 
     var showInDock: Bool {
@@ -57,6 +77,7 @@ final class SettingsWindowController: NSWindowController {
     private let drawingCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let dockCheck = NSButton(checkboxWithTitle: "Show Stash in the Dock and ⌘-Tab switcher", target: nil, action: nil)
     private let topCheck = NSButton(checkboxWithTitle: "Keep the Stash window on top of other windows", target: nil, action: nil)
+    private let themeControl = NSSegmentedControl(labels: Theme.allCases.map(\.title), trackingMode: .selectOne, target: nil, action: nil)
     private let loginCheck = NSButton(checkboxWithTitle: "Open Stash when you log in", target: nil, action: nil)
     private let accessLabel = NSTextField(labelWithString: "")
     private let accessButton = NSButton(title: "Open Accessibility Settings…", target: nil, action: nil)
@@ -76,7 +97,7 @@ final class SettingsWindowController: NSWindowController {
             keyPopup.addItem(withTitle: "Double-tap \(key.symbol) \(key.name)")
             keyPopup.lastItem?.representedObject = key.rawValue
         }
-        for control in [keyPopup, drawingCheck, dockCheck, topCheck, loginCheck, accessButton] as [NSControl] {
+        for control in [keyPopup, drawingCheck, themeControl, dockCheck, topCheck, loginCheck, accessButton] as [NSControl] {
             control.target = self
             control.action = #selector(controlChanged(_:))
         }
@@ -86,6 +107,7 @@ final class SettingsWindowController: NSWindowController {
             [label("Capture:"), keyPopup],
             [NSGridCell.emptyContentView, hint("Select text anywhere, then double-tap to save it. With nothing selected, it opens Stash.")],
             [label("Drawing:"), drawingCheck],
+            [label("Appearance:"), themeControl],
             [label("Window:"), dockCheck],
             [NSGridCell.emptyContentView, topCheck],
             [label("Startup:"), loginCheck],
@@ -96,10 +118,9 @@ final class SettingsWindowController: NSWindowController {
         grid.rowAlignment = .firstBaseline
         grid.rowSpacing = 10
         grid.columnSpacing = 10
-        grid.row(at: 2).topPadding = 8
-        grid.row(at: 3).topPadding = 8
-        grid.row(at: 5).topPadding = 8
-        grid.row(at: 6).topPadding = 8
+        for row in [2, 3, 4, 6, 7] {
+            grid.row(at: row).topPadding = 8
+        }
         grid.translatesAutoresizingMaskIntoConstraints = false
 
         let content = NSView()
@@ -128,6 +149,7 @@ final class SettingsWindowController: NSWindowController {
 
     private func refresh() {
         let settings = Settings.shared
+        themeControl.selectedSegment = Theme.allCases.firstIndex(of: settings.theme) ?? 0
         keyPopup.selectItem(at: TriggerKey.allCases.firstIndex(of: settings.triggerKey) ?? 0)
         drawingCheck.title = "⌘ + double-tap \(settings.triggerKey.symbol) opens the drawing editor"
         drawingCheck.state = settings.drawingShortcut ? .on : .off
@@ -147,6 +169,7 @@ final class SettingsWindowController: NSWindowController {
         case drawingCheck: settings.drawingShortcut = drawingCheck.state == .on
         case dockCheck: settings.showInDock = dockCheck.state == .on
         case topCheck: settings.keepOnTop = topCheck.state == .on
+        case themeControl: settings.theme = Theme.allCases[themeControl.selectedSegment]
         case loginCheck: settings.launchAtLogin = loginCheck.state == .on
         case accessButton:
             SelectionReader.promptForTrust()
