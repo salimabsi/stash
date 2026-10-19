@@ -92,6 +92,13 @@ private final class BackgroundView: NSView {
 private enum Row {
     case header(Section)
     case item(Item)
+
+    var key: String {
+        switch self {
+        case .header(let section): "section-\(section.id)"
+        case .item(let item): "item-\(item.id)"
+        }
+    }
 }
 
 @MainActor
@@ -269,17 +276,47 @@ final class PanelController: NSObject {
 
     // MARK: - Rows
 
+    /// Applies only what changed (removed, inserted and updated rows) instead of reloading
+    /// everything: a full reload drops the measured row heights and scrolls back to the top.
     private func reload() {
         guard editing == nil else { return }
         let selected = selectedIDs
-        rows = []
+        let oldKeys = rows.map(\.key)
+        var newRows: [Row] = []
         let source = query.isEmpty ? store.visibleSections : store.sections
         for section in source {
             let items = query.isEmpty ? section.items : section.items.filter { $0.text.localizedCaseInsensitiveContains(query) }
-            if section.level > 0, query.isEmpty || !items.isEmpty { rows.append(.header(section)) }
-            rows += items.map(Row.item)
+            if section.level > 0, query.isEmpty || !items.isEmpty { newRows.append(.header(section)) }
+            newRows += items.map(Row.item)
         }
-        table.reloadData()
+        rows = newRows
+
+        if oldKeys.isEmpty || table.numberOfRows != oldKeys.count {
+            table.reloadData()
+        } else {
+            let difference = rows.map(\.key).difference(from: oldKeys)
+            var removed = IndexSet()
+            var inserted = IndexSet()
+            for change in difference {
+                switch change {
+                case .remove(let offset, _, _): removed.insert(offset)
+                case .insert(let offset, _, _): inserted.insert(offset)
+                }
+            }
+            table.beginUpdates()
+            table.removeRows(at: removed, withAnimation: .effectFade)
+            table.insertRows(at: inserted, withAnimation: .effectFade)
+            table.endUpdates()
+
+            let kept = IndexSet(rows.indices).subtracting(inserted)
+            table.reloadData(forRowIndexes: kept, columnIndexes: [0])
+            for row in kept {
+                if case .item(let item) = rows[row], let rowView = table.rowView(atRow: row, makeIfNecessary: false) as? CardRowView {
+                    rowView.tagColor = item.color
+                }
+            }
+            table.noteHeightOfRows(withIndexesChanged: kept)
+        }
         let restore = IndexSet(rows.indices.filter { if case .item(let item) = rows[$0] { return selected.contains(item.id) } else { return false } })
         table.selectRowIndexes(restore, byExtendingSelection: false)
 
