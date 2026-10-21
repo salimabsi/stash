@@ -152,7 +152,7 @@ final class CaptureToast {
     }
 }
 
-private final class ToastContent: NSView {
+final class ToastContent: NSView {
     private static let radius: CGFloat = 16
 
     private let icon = NSImageView()

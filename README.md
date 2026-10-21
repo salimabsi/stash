@@ -14,7 +14,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" width="860" alt="Stash in light and dark mode">
+  <img src="docs/demo.gif" width="860" alt="Demo: selecting text in a chat, pressing Shift twice to save it to Stash, queueing a prompt, copying it into the chat, ticking it off, and sketching in the drawing editor">
+  <br>
+  <sub><a href="docs/demo.mp4">Watch in full quality (MP4)</a></sub>
 </p>
 
 You're deep in a conversation with Claude or ChatGPT and think *"I'll need this later"*, but you don't want to stop. Select the text, **tap Shift twice**, and it's in Stash. Stash sits in the menu bar, keeps everything in one Markdown file on your Mac, and never touches the network.
@@ -26,6 +28,10 @@ Stash is a personal re-creation of [Copper](https://shadcn.com/copper) by [shadc
 1. **Select text in any app**: an answer in Claude, a link in Chrome, a line of code in your editor.
 2. **Press <kbd>⇧ Shift</kbd> twice.** Stash saves the selection to your active section and shows a small "Saved" notice, without taking you out of what you're doing.
 3. **Click the S in your menu bar** to open Stash, or press <kbd>⇧ Shift</kbd> twice with nothing selected. Copy a note back into your next prompt, then tick it off.
+
+<p align="center">
+  <img src="docs/screenshot.png" width="860" alt="Stash in light and dark mode">
+</p>
 
 ## Features
 
@@ -133,7 +139,8 @@ In native Mac apps, Stash reads the selection through the macOS Accessibility AP
 | `build.sh` | Builds the `.app` bundle; `./build.sh install` also installs and launches it |
 | `scripts/setup-signing.sh` | One-time local signing certificate |
 | `scripts/make-icon.swift` | Draws the app icon and builds `Resources/AppIcon.icns` |
-| `scripts/make-screenshots.sh` | Renders `docs/screenshot.png` offscreen from sample notes |
+| `scripts/make-screenshots.sh` | Renders `docs/screenshot.png` and `docs/menus.png` from sample notes |
+| `scripts/make-demo.sh` | Renders the README demo (`docs/demo.mp4` and `.gif`) offscreen from the real app views; needs ffmpeg |
 
 Set `STASH_DATA_DIR` to run Stash against a different folder, for example to experiment without touching your real notes:
 

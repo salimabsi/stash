@@ -399,7 +399,7 @@ final class DrawingWindowController: NSWindowController, NSWindowDelegate {
         controller.window?.makeFirstResponder(controller.canvas)
     }
 
-    private init(onSave: @escaping (Data, Bool) -> Void) {
+    init(onSave: @escaping (Data, Bool) -> Void) {
         self.onSave = onSave
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 760, height: 520),
